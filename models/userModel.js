@@ -37,11 +37,13 @@ const userSchema = new mongoose.Schema({
     },
     address: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Address"
+        ref: "Address",
+        default: null,
     },
     wishlist: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Product"
+        ref: "Product",
+        default: null,
     },
     }, 
     {
