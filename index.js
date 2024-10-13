@@ -11,7 +11,7 @@ dbConnect();
 
 // Middleware to parse JSON bodies
 app.use(bodyParser.json()); 
-app.use(bodyParser.urlencoded({ entended: false}));
+app.use(bodyParser.urlencoded({ extended: false}));
 app.use('/api/user', authRouter); 
 
 app.listen(PORT, () => {
