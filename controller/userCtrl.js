@@ -108,9 +108,9 @@ const logoutUser = asyncHandler(async (req, res) => {
     const cookies = req.cookies;
 
     // Check if there is a refresh token in cookies
-    if (!cookies?.refreshToken) {
+    if (Object.getPrototypeOf(cookies) === null) {
         console.log('No refresh token in cookies');
-        return res.status(204).json({ msg: 'No content, already logged out' }); // 204 - No Content
+        return res.status(200).json({ msg: 'No content, already logged out' }); // 204 - No Content
     }
 
     const refreshToken = cookies.refreshToken;
@@ -123,7 +123,7 @@ const logoutUser = asyncHandler(async (req, res) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // Set secure only in production
         });
-        return res.status(204).json({ msg: 'Logged out successfully' });
+        return res.status(200).json({ msg: 'Logged out successfully' });
     }
 
     // Remove the refresh token from the user document
@@ -136,7 +136,7 @@ const logoutUser = asyncHandler(async (req, res) => {
         secure: process.env.NODE_ENV === 'production', // Set secure only in production
     });
 
-    return res.status(204).json({ msg: 'Logged out successfully' });
+    return res.status(200).json({ msg: 'Logged out successfully' });
 });
 
 
