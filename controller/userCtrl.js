@@ -3,6 +3,9 @@ const { generateToken } = require('../config/jwtToken');
 const User = require('../models/userModel'); 
 const asyncHandler = require('express-async-handler');
 const validateMongoDbId = require('../utils/validateMongodb');
+const { generateRefreshToken } = require('../config/refreshToken');
+const jwt = require('jsonwebtoken');
+
 
 const createUser = asyncHandler(async (req, res) => {
     const email = req.body.email;
@@ -38,25 +41,105 @@ const createUser = asyncHandler(async (req, res) => {
 
 
 const loginUserCtrl = asyncHandler(async (req, res) => {
-    const {email, password} = req.body;
-    // check if user exists or not
+    const { email, password } = req.body;
+
     const findUser = await User.findOne({ email });
-    if(findUser && (await findUser.isPasswordMatched(password))){
-        res.json({
-            _id: findUser?. _id,
-            firstname: findUser?. firstname,
-            lastname: findUser?. lastname,
-            email: findUser?. email,
-            mobile: findUser?. mobile,
-            token: generateToken(findUser?. _id),
+
+    // Check if user exists and password matches
+    if (findUser && (findUser.isPasswordMatched(password))) {
+        const refreshToken = await generateRefreshToken(findUser.id);
+        await User.findByIdAndUpdate(findUser._id, { refreshToken: refreshToken }, { new: true });
+
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: true, // Ensure secure is enabled in production
+            sameSite: 'Strict',
+            maxAge: 72 * 60 * 60 * 1000, // 3 days
         });
-    } else{
+
+        res.json({
+            _id: findUser._id,
+            firstname: findUser.firstname,
+            lastname: findUser.lastname,
+            email: findUser.email,
+            mobile: findUser.mobile,
+            token: generateToken(findUser._id),
+        });
+    } else {
         res.status(401).json({
             msg: 'Invalid Credentials',
             success: false,
-        });        
+        });
     }
 });
+
+
+const handleRefreshToken = asyncHandler(async (req, res) => {
+    const cookies = req.cookies;
+
+    if (!cookies?.refreshToken) {
+        return res.status(403).json({ msg: 'No refresh token provided' });
+    }
+
+    const refreshToken = cookies.refreshToken;
+    console.log("Refresh token in cookies:", refreshToken);
+
+    // Find the user with the matching refresh token in the database
+    const user = await User.findOne({ refreshToken });
+    if (!user) {
+        return res.status(403).json({ msg: ' No user match refresh token' });
+    }
+
+    // Verify the refresh token
+    jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(403).json({ msg: 'Invalid refresh token' });
+        }
+
+        // If token is valid, generate a new access token
+        const newAccessToken = generateToken(user._id);
+
+        // Send the new access token back to the client
+        res.json({ accessToken: newAccessToken });
+    });
+});
+
+const logoutUser = asyncHandler(async (req, res) => {
+    const cookies = req.cookies;
+
+    // Check if there is a refresh token in cookies
+    if (!cookies?.refreshToken) {
+        console.log('No refresh token in cookies');
+        return res.status(204).json({ msg: 'No content, already logged out' }); // 204 - No Content
+    }
+
+    const refreshToken = cookies.refreshToken;
+
+    // Find the user by refresh token
+    const user = await User.findOne({ refreshToken });
+    if (!user) {
+        // If no user is found, clear the refresh token cookie
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Set secure only in production
+        });
+        return res.status(204).json({ msg: 'Logged out successfully' });
+    }
+
+    // Remove the refresh token from the user document
+    user.refreshToken = '';
+    await user.save();
+
+    // Clear the refresh token cookie on the client
+    res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // Set secure only in production
+    });
+
+    return res.status(204).json({ msg: 'Logged out successfully' });
+});
+
+
 
 const updateUser = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -100,8 +183,10 @@ const getallUser = asyncHandler(async (req, res) => {
 
 const getaUser = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    validateMongoDbId(id);
-    
+    console.log("ID passed in params:", id);  // Log the ID
+
+    validateMongoDbId(id);  // Check if the ID is valid
+
     try {
         const user = await User.findById(id);
         if (!user) {
@@ -115,6 +200,7 @@ const getaUser = asyncHandler(async (req, res) => {
         throw new Error(error);
     }
 });
+
 
 const deleteUser = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -203,12 +289,14 @@ const unblockUser = asyncHandler(async (req, res) => {
 
 module.exports = { 
     createUser, 
-    loginUserCtrl, 
+    loginUserCtrl,
+    handleRefreshToken, 
     getallUser, 
     getaUser, 
     deleteUser, 
     updateUser, 
     blockUser, 
-    unblockUser, 
+    unblockUser,
+    logoutUser, 
 };
 

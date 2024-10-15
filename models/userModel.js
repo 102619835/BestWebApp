@@ -45,18 +45,25 @@ const userSchema = new mongoose.Schema({
         ref: "Product",
         default: null,
     },
+    refreshToken: {
+        type: String,
+    },
     }, 
     {
     timestamps: true,
     }
 );
 
-userSchema.pre('save', async function (next){
+userSchema.pre('save', async function (next) {
+    if (!this.isModified('password')) {
+        return next();
+    }
     const salt = await bcrypt.genSaltSync(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
-userSchema.methods.isPasswordMatched = async function(enteredPassword){
+userSchema.methods.isPasswordMatched = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 
